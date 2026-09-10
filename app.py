@@ -3,14 +3,12 @@ import pandas as pd
 import numpy as np
 import joblib
 
-# Cache the model loading -- runs only once, not on every interaction
 @st.cache_resource
 def load_model():
     model = joblib.load("car_price_model.pkl")
     model_columns = joblib.load("model_columns.pkl")
     return model, model_columns
 
-# Cache the dataset loading -- runs only once
 @st.cache_data
 def load_data():
     return pd.read_csv("all_cars_data_cleaned.csv")
@@ -18,48 +16,20 @@ def load_data():
 model, model_columns = load_model()
 df = load_data()
 
-# Hide the +/- stepper buttons on number inputs, and dim the placeholder option
 st.markdown("""
 <style>
 button[data-testid="stNumberInputStepUp"], button[data-testid="stNumberInputStepDown"] {
     display: none;
 }
-div[data-baseweb="select"] span {
-    color: inherit;
-}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🚗 Pakistani Used Car Price Predictor")
-
+st.title("🛞 Pakistani Used Car Price Predictor")
 st.header("Enter Car Details")
 
 PLACEHOLDER = "-- Select --"
 
-def dynamic_field(label, options_series, widget_type="select"):
-    """
-    Shows a widget only if there is more than one real option.
-    If there's exactly one option, auto-selects it and just displays it.
-    If there are no options yet (Brand/Model not chosen), shows an empty/placeholder widget.
-    """
-    options = sorted(options_series.unique().tolist()) if options_series is not None else []
-
-    if len(options) == 1:
-        st.write(f"**{label}:** {options[0]}  *(only option available)*")
-        return options[0]
-    elif len(options) == 0:
-        if widget_type == "select":
-            st.selectbox(label, [PLACEHOLDER], disabled=True)
-        else:
-            st.radio(label, [], index=None)
-        return None
-    else:
-        if widget_type == "select":
-            return st.selectbox(label, [PLACEHOLDER] + options)
-        else:
-            return st.radio(label, options, index=None)
-
-# --- Cascading Dropdown: Brand -> Model ---
+# --- Step 1: Brand -> Model (always active) ---
 brands = [PLACEHOLDER] + sorted(df["Brand"].unique())
 selected_brand = st.selectbox("Select Brand", brands)
 
@@ -69,71 +39,81 @@ else:
     available_models = [PLACEHOLDER]
 selected_model = st.selectbox("Select Model", available_models)
 
-if selected_brand != PLACEHOLDER and selected_model != PLACEHOLDER:
+# Everything below stays locked until Brand AND Model are both chosen
+car_chosen = (selected_brand != PLACEHOLDER) and (selected_model != PLACEHOLDER)
+
+if car_chosen:
     model_subset = df[(df["Brand"] == selected_brand) & (df["Model"] == selected_model)]
 else:
     model_subset = pd.DataFrame()
+    st.info("👆 Select a Brand and Model first to unlock the remaining fields.")
 
-# --- Year ---
-selected_year = dynamic_field("Manufacture Year", model_subset["Year"] if not model_subset.empty else None, "select")
-if selected_year == PLACEHOLDER:
-    selected_year = None
+def dynamic_field(label, options_series, widget_type, locked):
+    """Shows a widget, auto-selecting if there's only one real option, and locking it if 'locked' is True."""
+    if locked:
+        if widget_type == "select":
+            st.selectbox(label, [PLACEHOLDER], disabled=True)
+        else:
+            st.radio(label, [], index=None, disabled=True)
+        return None
 
-# --- KM Driven ---
-km_driven = st.number_input("KM Driven", min_value=0, max_value=1000000, value=None, step=1000, placeholder="Enter KM driven")
+    options = sorted(options_series.unique().tolist())
 
-# --- Engine_CC ---
-selected_cc = dynamic_field("Engine CC", model_subset["Engine_CC"] if not model_subset.empty else None, "select")
-if selected_cc == PLACEHOLDER:
-    selected_cc = None
+    if len(options) == 1:
+        st.write(f"**{label}:** {options[0]}  *(only option available)*")
+        return options[0]
+    else:
+        if widget_type == "select":
+            result = st.selectbox(label, [PLACEHOLDER] + options)
+            return None if result == PLACEHOLDER else result
+        else:
+            return st.radio(label, options, index=None)
 
-# --- City (sorted by frequency) ---
+# --- Step 2: Everything else, unlocked together once car_chosen is True ---
+selected_year = dynamic_field("Manufacture Year", model_subset["Year"] if car_chosen else None, "select", locked=not car_chosen)
+
+km_driven = st.number_input(
+    "KM Driven", min_value=0, max_value=1000000, value=None, step=1000,
+    placeholder="Enter KM driven", disabled=not car_chosen
+)
+
+selected_cc = dynamic_field("Engine CC", model_subset["Engine_CC"] if car_chosen else None, "select", locked=not car_chosen)
+
 city_counts = df["City"].value_counts()
 cities = [PLACEHOLDER] + city_counts.index.tolist()
-selected_city = st.selectbox("Select City", cities)
+selected_city_raw = st.selectbox("Select City", cities, disabled=not car_chosen)
+selected_city = None if selected_city_raw == PLACEHOLDER else selected_city_raw
 
-# --- Fuel Type (radio, auto-select if only one option) ---
-selected_fuel = dynamic_field("Fuel Type", model_subset["Fuel_Type"] if not model_subset.empty else None, "radio")
+selected_fuel = dynamic_field("Fuel Type", model_subset["Fuel_Type"] if car_chosen else None, "radio", locked=not car_chosen)
+selected_transmission = dynamic_field("Transmission", model_subset["Transmission"] if car_chosen else None, "radio", locked=not car_chosen)
+selected_body = dynamic_field("Body Type", model_subset["Body_Type"] if car_chosen else None, "radio", locked=not car_chosen)
+selected_assembly = dynamic_field("Assembly", model_subset["Assembly"] if car_chosen else None, "radio", locked=not car_chosen)
 
-# --- Transmission (radio, auto-select if only one option) ---
-selected_transmission = dynamic_field("Transmission", model_subset["Transmission"] if not model_subset.empty else None, "radio")
-
-# --- Body Type (radio, auto-select if only one option) ---
-selected_body = dynamic_field("Body Type", model_subset["Body_Type"] if not model_subset.empty else None, "radio")
-
-# --- Assembly (radio, auto-select if only one option) ---
-selected_assembly = dynamic_field("Assembly", model_subset["Assembly"] if not model_subset.empty else None, "radio")
-
-# --- Color ---
 colors = [PLACEHOLDER] + sorted(df["Color"].unique())
-selected_color = st.selectbox("Color", colors)
+selected_color_raw = st.selectbox("Color", colors, disabled=not car_chosen)
+selected_color = None if selected_color_raw == PLACEHOLDER else selected_color_raw
 
-# --- Owner Type (radio, full list) ---
 owner_options = sorted(df["Owner_Type"].unique())
-selected_owner = st.radio("Owner Type", owner_options, index=None)
+selected_owner = st.radio("Owner Type", owner_options, index=None, disabled=not car_chosen)
 
-# --- Registered In (sorted by frequency, like City) ---
 registered_counts = df["Registered_In"].value_counts()
 registered_locations = [PLACEHOLDER] + registered_counts.index.tolist()
-selected_registered = st.selectbox("Registered In", registered_locations)
+selected_registered_raw = st.selectbox("Registered In", registered_locations, disabled=not car_chosen)
+selected_registered = None if selected_registered_raw == PLACEHOLDER else selected_registered_raw
 
 
 st.header("Predicted Price")
 
-if st.button("Predict Price"):
+if st.button("Predict Price", disabled=not car_chosen):
 
     missing_fields = []
-    if selected_brand == PLACEHOLDER:
-        missing_fields.append("Brand")
-    if selected_model == PLACEHOLDER:
-        missing_fields.append("Model")
     if selected_year is None:
         missing_fields.append("Manufacture Year")
     if km_driven is None:
         missing_fields.append("KM Driven")
     if selected_cc is None:
         missing_fields.append("Engine CC")
-    if selected_city == PLACEHOLDER:
+    if selected_city is None:
         missing_fields.append("City")
     if selected_fuel is None:
         missing_fields.append("Fuel Type")
@@ -143,11 +123,11 @@ if st.button("Predict Price"):
         missing_fields.append("Body Type")
     if selected_assembly is None:
         missing_fields.append("Assembly")
-    if selected_color == PLACEHOLDER:
+    if selected_color is None:
         missing_fields.append("Color")
     if selected_owner is None:
         missing_fields.append("Owner Type")
-    if selected_registered == PLACEHOLDER:
+    if selected_registered is None:
         missing_fields.append("Registered In")
 
     if missing_fields:
