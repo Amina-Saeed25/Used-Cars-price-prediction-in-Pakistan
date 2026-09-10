@@ -18,13 +18,48 @@ def load_data():
 model, model_columns = load_model()
 df = load_data()
 
+# Hide the +/- stepper buttons on number inputs, and dim the placeholder option
+st.markdown("""
+<style>
+button[data-testid="stNumberInputStepUp"], button[data-testid="stNumberInputStepDown"] {
+    display: none;
+}
+div[data-baseweb="select"] span {
+    color: inherit;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🚗 Pakistani Used Car Price Predictor")
 
 st.header("Enter Car Details")
 
 PLACEHOLDER = "-- Select --"
 
-# --- Cascading Dropdown: Brand -> Model (with placeholder so nothing is pre-selected) ---
+def dynamic_field(label, options_series, widget_type="select"):
+    """
+    Shows a widget only if there is more than one real option.
+    If there's exactly one option, auto-selects it and just displays it.
+    If there are no options yet (Brand/Model not chosen), shows an empty/placeholder widget.
+    """
+    options = sorted(options_series.unique().tolist()) if options_series is not None else []
+
+    if len(options) == 1:
+        st.write(f"**{label}:** {options[0]}  *(only option available)*")
+        return options[0]
+    elif len(options) == 0:
+        if widget_type == "select":
+            st.selectbox(label, [PLACEHOLDER], disabled=True)
+        else:
+            st.radio(label, [], index=None)
+        return None
+    else:
+        if widget_type == "select":
+            return st.selectbox(label, [PLACEHOLDER] + options)
+        else:
+            return st.radio(label, options, index=None)
+
+# --- Cascading Dropdown: Brand -> Model ---
 brands = [PLACEHOLDER] + sorted(df["Brand"].unique())
 selected_brand = st.selectbox("Select Brand", brands)
 
@@ -34,72 +69,52 @@ else:
     available_models = [PLACEHOLDER]
 selected_model = st.selectbox("Select Model", available_models)
 
-# Only filter the dataset once both Brand and Model are chosen
 if selected_brand != PLACEHOLDER and selected_model != PLACEHOLDER:
     model_subset = df[(df["Brand"] == selected_brand) & (df["Model"] == selected_model)]
 else:
-    model_subset = pd.DataFrame()  # empty until user picks Brand+Model
+    model_subset = pd.DataFrame()
 
-# --- Year (dynamic, with placeholder) ---
-if not model_subset.empty:
-    year_options = [PLACEHOLDER] + sorted(model_subset["Year"].unique().tolist())
-else:
-    year_options = [PLACEHOLDER]
-selected_year = st.selectbox("Manufacture Year", year_options)
+# --- Year ---
+selected_year = dynamic_field("Manufacture Year", model_subset["Year"] if not model_subset.empty else None, "select")
+if selected_year == PLACEHOLDER:
+    selected_year = None
 
-# --- KM Driven (no default value, forces user to type) ---
+# --- KM Driven ---
 km_driven = st.number_input("KM Driven", min_value=0, max_value=1000000, value=None, step=1000, placeholder="Enter KM driven")
 
-# --- Engine_CC (dynamic, with placeholder) ---
-if not model_subset.empty:
-    cc_options = [PLACEHOLDER] + sorted(model_subset["Engine_CC"].unique().tolist())
-else:
-    cc_options = [PLACEHOLDER]
-selected_cc = st.selectbox("Engine CC", cc_options)
+# --- Engine_CC ---
+selected_cc = dynamic_field("Engine CC", model_subset["Engine_CC"] if not model_subset.empty else None, "select")
+if selected_cc == PLACEHOLDER:
+    selected_cc = None
 
-# --- City (full list, with placeholder, sorted by frequency) ---
+# --- City (sorted by frequency) ---
 city_counts = df["City"].value_counts()
 cities = [PLACEHOLDER] + city_counts.index.tolist()
 selected_city = st.selectbox("Select City", cities)
 
-# --- Fuel Type (radio button, dynamic to this model, nothing selected by default) ---
-if not model_subset.empty:
-    fuel_options = sorted(model_subset["Fuel_Type"].unique())
-else:
-    fuel_options = []
-selected_fuel = st.radio("Fuel Type", fuel_options, index=None)
+# --- Fuel Type (radio, auto-select if only one option) ---
+selected_fuel = dynamic_field("Fuel Type", model_subset["Fuel_Type"] if not model_subset.empty else None, "radio")
 
-# --- Transmission (radio button, dynamic) ---
-if not model_subset.empty:
-    transmission_options = sorted(model_subset["Transmission"].unique())
-else:
-    transmission_options = []
-selected_transmission = st.radio("Transmission", transmission_options, index=None)
+# --- Transmission (radio, auto-select if only one option) ---
+selected_transmission = dynamic_field("Transmission", model_subset["Transmission"] if not model_subset.empty else None, "radio")
 
-# --- Body Type (radio button, dynamic) ---
-if not model_subset.empty:
-    body_options = sorted(model_subset["Body_Type"].unique())
-else:
-    body_options = []
-selected_body = st.radio("Body Type", body_options, index=None)
+# --- Body Type (radio, auto-select if only one option) ---
+selected_body = dynamic_field("Body Type", model_subset["Body_Type"] if not model_subset.empty else None, "radio")
 
-# --- Assembly (radio button, dynamic) ---
-if not model_subset.empty:
-    assembly_options = sorted(model_subset["Assembly"].unique())
-else:
-    assembly_options = []
-selected_assembly = st.radio("Assembly", assembly_options, index=None)
+# --- Assembly (radio, auto-select if only one option) ---
+selected_assembly = dynamic_field("Assembly", model_subset["Assembly"] if not model_subset.empty else None, "radio")
 
-# --- Color (full list, with placeholder) ---
+# --- Color ---
 colors = [PLACEHOLDER] + sorted(df["Color"].unique())
 selected_color = st.selectbox("Color", colors)
 
-# --- Owner Type (radio button, full list) ---
+# --- Owner Type (radio, full list) ---
 owner_options = sorted(df["Owner_Type"].unique())
 selected_owner = st.radio("Owner Type", owner_options, index=None)
 
-# --- Registered In (full list, with placeholder) ---
-registered_locations = [PLACEHOLDER] + sorted(df["Registered_In"].unique())
+# --- Registered In (sorted by frequency, like City) ---
+registered_counts = df["Registered_In"].value_counts()
+registered_locations = [PLACEHOLDER] + registered_counts.index.tolist()
 selected_registered = st.selectbox("Registered In", registered_locations)
 
 
@@ -107,17 +122,16 @@ st.header("Predicted Price")
 
 if st.button("Predict Price"):
 
-    # --- Validation: check every required field before predicting ---
     missing_fields = []
     if selected_brand == PLACEHOLDER:
         missing_fields.append("Brand")
     if selected_model == PLACEHOLDER:
         missing_fields.append("Model")
-    if selected_year == PLACEHOLDER:
+    if selected_year is None:
         missing_fields.append("Manufacture Year")
     if km_driven is None:
         missing_fields.append("KM Driven")
-    if selected_cc == PLACEHOLDER:
+    if selected_cc is None:
         missing_fields.append("Engine CC")
     if selected_city == PLACEHOLDER:
         missing_fields.append("City")
@@ -142,7 +156,6 @@ if st.button("Predict Price"):
         current_year = 2026
         car_age = current_year - selected_year
 
-        # Build a single-row dataframe matching the training data structure
         input_data = {
             "Engine_CC": selected_cc,
             "Car_Age": car_age,
@@ -152,7 +165,6 @@ if st.button("Predict Price"):
             "Registered_In_Freq": df[df["Registered_In"] == selected_registered].shape[0],
         }
 
-        # Initialize all one-hot columns to 0, then set the selected ones to 1
         for col in model_columns:
             if col not in input_data:
                 input_data[col] = 0
@@ -182,7 +194,6 @@ if st.button("Predict Price"):
         elif selected_owner == "Unknown":
             input_data["Owner_Type_Unknown"] = 1
 
-        # Determine KM_Range bin based on km_driven
         km_bins = [0, 25000, 50000, 75000, 100000, 150000, 200000, float("inf")]
         km_labels = ["0-25k", "25k-50k", "50k-75k", "75k-100k", "100k-150k", "150k-200k", "200k+"]
         km_range_label = pd.cut([km_driven], bins=km_bins, labels=km_labels)[0]
@@ -190,10 +201,8 @@ if st.button("Predict Price"):
         if km_range_col in input_data:
             input_data[km_range_col] = 1
 
-        # Build the final input row in the EXACT column order the model expects
         input_df = pd.DataFrame([input_data])[model_columns]
 
-        # Get predictions from all trees for a price range, plus the point estimate
         tree_preds_log = [tree.predict(input_df.values)[0] for tree in model.estimators_]
         tree_preds_actual = np.expm1(tree_preds_log)
 
