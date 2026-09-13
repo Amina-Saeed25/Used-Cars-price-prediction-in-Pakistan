@@ -24,7 +24,65 @@ button[data-testid="stNumberInputStepUp"], button[data-testid="stNumberInputStep
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🛞 Pakistani Used Car Price Predictor")
+# --- Custom tire icon (original illustration, embedded as inline SVG) ---
+tire_svg = """
+<svg width="70" height="70" viewBox="0 0 400 400" role="img" style="vertical-align:middle;">
+<defs>
+<radialGradient id="tireGrad" cx="40%" cy="35%" r="70%">
+<stop offset="0%" stop-color="#3a3a3d"/>
+<stop offset="70%" stop-color="#1a1a1c"/>
+<stop offset="100%" stop-color="#0a0a0b"/>
+</radialGradient>
+<radialGradient id="rimGrad" cx="35%" cy="30%" r="70%">
+<stop offset="0%" stop-color="#e8e9eb"/>
+<stop offset="45%" stop-color="#a6a9ae"/>
+<stop offset="100%" stop-color="#6b6e73"/>
+</radialGradient>
+<radialGradient id="hubGrad" cx="40%" cy="35%" r="70%">
+<stop offset="0%" stop-color="#d4d6d9"/>
+<stop offset="100%" stop-color="#8a8d92"/>
+</radialGradient>
+</defs>
+<circle cx="200" cy="200" r="150" fill="url(#tireGrad)"/>
+<g stroke="#050506" stroke-width="3" opacity="0.85">
+<line x1="200" y1="50" x2="200" y2="72"/>
+<line x1="326" y1="88" x2="313" y2="105"/>
+<line x1="200" y1="350" x2="200" y2="328"/>
+<line x1="74" y1="88" x2="87" y2="105"/>
+<line x1="326" y1="312" x2="313" y2="295"/>
+<line x1="74" y1="312" x2="87" y2="295"/>
+<line x1="350" y1="200" x2="328" y2="200"/>
+<line x1="50" y1="200" x2="72" y2="200"/>
+<line x1="316" y1="140" x2="298" y2="152"/>
+<line x1="84" y1="140" x2="102" y2="152"/>
+<line x1="316" y1="260" x2="298" y2="248"/>
+<line x1="84" y1="260" x2="102" y2="248"/>
+</g>
+<circle cx="200" cy="200" r="150" fill="none" stroke="#050506" stroke-width="4"/>
+<circle cx="200" cy="200" r="112" fill="url(#rimGrad)" stroke="#4d4f53" stroke-width="1.5"/>
+<g fill="#7a7d82" stroke="#4d4f53" stroke-width="1">
+<path d="M200 200 L200 96 L212 98 L214 198 Z"/>
+<path d="M200 200 L288 148 L296 158 L210 202 Z"/>
+<path d="M200 200 L288 252 L280 264 L198 206 Z"/>
+<path d="M200 200 L200 304 L188 302 L186 202 Z"/>
+<path d="M200 200 L112 252 L104 242 L190 198 Z"/>
+<path d="M200 200 L112 148 L120 136 L202 196 Z"/>
+</g>
+<circle cx="200" cy="200" r="34" fill="url(#hubGrad)" stroke="#4d4f53" stroke-width="1.5"/>
+<circle cx="200" cy="200" r="9" fill="#3a3c40"/>
+<g fill="#3a3c40">
+<circle cx="200" cy="176" r="4"/>
+<circle cx="221" cy="188" r="4"/>
+<circle cx="221" cy="212" r="4"/>
+<circle cx="200" cy="224" r="4"/>
+<circle cx="179" cy="212" r="4"/>
+<circle cx="179" cy="188" r="4"/>
+</g>
+</svg>
+"""
+
+st.markdown(f'<div style="display:flex; align-items:center; gap:12px;">{tire_svg}<h1 style="margin:0;">Pakistani Used Car Price Predictor</h1></div>', unsafe_allow_html=True)
+
 st.header("Enter Car Details")
 
 PLACEHOLDER = "-- Select --"
@@ -46,10 +104,8 @@ if car_chosen:
     model_subset = df[(df["Brand"] == selected_brand) & (df["Model"] == selected_model)]
 else:
     model_subset = pd.DataFrame()
-    st.info("👆 Select a Brand and Model first to unlock the remaining fields.")
 
 def dynamic_field(label, options_series, widget_type, locked):
-    """Shows a widget, auto-selecting if there's only one real option, and locking it if 'locked' is True."""
     if locked:
         if widget_type == "select":
             st.selectbox(label, [PLACEHOLDER], disabled=True)
